@@ -1,0 +1,37 @@
+---
+title: "Reddit_politics"
+output: html_document
+date: '2022-05-14'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+#load packages
+library(here) #used for folder navigation
+library(tidyverse) #loading packages from tidyverse
+library(tidytext) #used for natural language processing
+library(ggthemes) #used for graphic specifics
+library(skimr) #used to get fist overview of dataset
+library(janitor) #used to clean variable names
+```
+
+
+```{r Loading Data}
+reddit_data <- read_csv(here("Data/file_name.csv"))
+```
+
+```{r Data Inspection}
+str(reddit_data)
+skim(reddit_data)
+head(reddit_data, 10) #from skimming the data and looking at the first 10 rwos, we notice that it is standard convention for reddit users to deliver their message in the title of the post, and don'T use the subtext at all. Actually the subtext is only used in 20% of posts. To be able to analyse all text we have, we will concenate the title and the subtext
+```
+
+```{r Preprocessing data}
+reddit_data <- reddit_data %>% mutate(full_post = paste(title, text))
+```
+
+
+
