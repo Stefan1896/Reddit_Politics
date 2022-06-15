@@ -16,6 +16,7 @@ library(tidytext) #used for natural language processing
 library(ggthemes) #used for graphic specifics
 library(skimr) #used to get fist overview of dataset
 library(janitor) #used to clean variable names
+library(textdata) #used for sentiment analyses
 ```
 
 
@@ -28,10 +29,280 @@ str(reddit_data)
 skim(reddit_data)
 head(reddit_data, 10) #from skimming the data and looking at the first 10 rwos, we notice that it is standard convention for reddit users to deliver their message in the title of the post, and don'T use the subtext at all. Actually the subtext is only used in 20% of posts. To be able to analyse all text we have, we will concenate the title and the subtext
 ```
+```{r cleaning names}
+names(reddit_data) <- make_clean_names(names(reddit_data))
+```
+
 
 ```{r Preprocessing data}
-reddit_data <- reddit_data %>% mutate(full_post = paste(title, text))
+reddit_data <- reddit_data %>% mutate(full_post = sub(' NA$', '', paste(title, text))) 
+liberal <- reddit_data %>% filter(political_lean =='Liberal')
+conservative <- reddit_data %>% filter(political_lean =='Conservative')
+```
+
+
+```{r hashtag analysis}
+# extract all hashtags in list
+hashtags <- c(sapply(strsplit(reddit_data$full_post, "\\s+"), function(p) grep('(#+[a-zA-Z(_)]{1,})', p[startsWith(p, "#")], value=TRUE)))
+#get only unique hashtags per post
+hashtags <- sapply(hashtags, unique)
+#name list so the political lean from each post is visible as name in list
+names(hashtags) <- reddit_data$political_lean
+#make datatable from list with hashtags in one column and political lean in the other
+hashtags <- stack(hashtags)
+
+hashtags %>% filter(ind == "Liberal") %>% count(values) %>% arrange(-n)
+hashtags %>% filter(ind == "Conservative") %>% count(values) %>% arrange(-n)
+```
+
+
+``` {r basic cleaning}
+# Fix Contractions - get rid of contractions
+fix.contractions <- function(doc) {
+  doc <- gsub("won't", "will not", doc)
+  doc <- gsub("can't", "can not", doc)
+  doc <- gsub("n't", " not", doc)
+  doc <- gsub("'ll", " will", doc)
+  doc <- gsub("'re", " are", doc)
+  doc <- gsub("'ve", " have", doc)
+  doc <- gsub("'m", " am", doc)
+  doc <- gsub("'d", " would", doc)
+  doc <- gsub("'s", "", doc)   # 's could be 'is' or could be possessive: it has no expansion
+  return(doc)
+}
+
+# fix (expand) contractions
+reddit_data$full_post <- sapply(reddit_data$full_post, fix.contractions)
+
+# Remove Special Characters
+removeSpecialChars <- function(x) gsub("[^a-zA-Z0-9 ]", " ", x)
+reddit_data$full_post <- sapply(reddit_data$full_post, removeSpecialChars)
+
+#create character vector of grouping variables to count each n-gram only once per post
+grouping_variables <- c("title", "political_lean", "subreddit", "url", "text")
+```
+
+
+```{r create unigrams}
+# Creating unigrams (Extracting words from text). Converting to lowercase will also be done by unnest_tokens
+data(stop_words)
+unigrams <- reddit_data %>%
+  unnest_tokens(word, full_post) %>%
+  anti_join(stop_words, by = "word") %>%
+  filter(nchar(word) > 3, word != "https") %>%
+  distinct(title, word, .keep_all=TRUE) #use distinct to count unigram only once per post
+```
+
+#Sentiment Analysis
+
+Finally, we will do a sentiment analysis. When human readers approach a text, we use our understanding of the emotional intent of words to infer whether a section of text is positive or negative, or perhaps characterized by some other more nuanced emotion like surprise or disgust. We can use the tools of text mining to approach the emotional content of text programmatically.
+
+This technique is very interesting in the context of political discussions, since it allows us to check some interesting hypothesis.
+
+First of all, for example, it seems very likely and intuitive that the overall sentiment of a post where the Bigram "Donald Trump" is used is more positive for Conservatives than for Liberals. Let's check! To do this, we will consider the text as a combination of its individual words and the sentiment content of the whole text as the sum of the sentiment content of the individual words.
+
+We will use the AFINN lexicon for this approach: The AFINN lexicon assigns words with a score that runs between -5 and 5, with negative scores indicating negative sentiment and positive scores indicating positive sentiment.
+
+```{r Sentiment Analysis}
+#we use the get_sentiments function from the tidytext packages to get specific sentiment lexicons 
+get_sentiments("afinn")
+
+afinn <- unigrams %>% 
+  inner_join(get_sentiments("afinn")) %>% 
+  group_by(id) %>% 
+  summarise(sentiment = mean(value)) %>% 
+  mutate(method = "AFINN")
+
+#update reddit data to also include average sentiment of post
+reddit_data <- reddit_data %>% left_join(afinn, by = "id")
+```
+
+
+```{r conservatives common words}
+#most common meaningful words used by liberals and conservatives
+unigrams %>%
+  filter(political_lean == "Conservative") %>%
+  count(word, sort = TRUE) %>%
+  top_n(20) %>%
+  ungroup() %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot() +
+  geom_col(aes(word, n), fill = "#E81B23") +
+  theme(legend.position = "none", 
+      plot.title = element_text(hjust = 0.5),
+      panel.grid.major = element_blank()) +
+  xlab("") + 
+  ylab("Word Count") +
+  ggtitle("Most common meaningful words from Conservatives") +
+  coord_flip() 
+```
+
+```{r liberals common words}
+#most common meaningful words used by liberals and conservatives
+unigrams %>%
+  filter(political_lean == "Liberal") %>%
+  count(word, sort = TRUE) %>%
+  top_n(20) %>%
+  ungroup() %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot() +
+  geom_col(aes(word, n), fill = "#0015BC") +
+  theme(legend.position = "none", 
+      plot.title = element_text(hjust = 0.5),
+      panel.grid.major = element_blank()) +
+  xlab("") + 
+  ylab("Word Count") +
+  ggtitle("Most common meaningful words from Liberals") +
+  coord_flip() 
+
+```
+
+```{r}
+unigrams %>%
+  group_by(political_lean) %>%
+  count(word) %>%
+  top_n(20, n) %>%
+  ungroup() %>%
+  arrange(political_lean, -n) %>%
+  ggplot(aes(n, fct_reorder(word, n), fill = political_lean)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~political_lean, scales = "free_y", ncol = 2) +
+  labs(x = "Frequency", y = NULL) +
+  theme_bw()
+
+```
+
+
+```{r biggest differences in word usage}
+#most common meaningful words used by liberals and conservatives
+unigrams_liberal <- unigrams %>%
+  filter(political_lean == "Liberal") %>%
+  #mutate(word = wordStem(word)) %>%
+  count(word, sort = TRUE) %>%
+  mutate(percent_liberal = n/sum(n)) %>% 
+  select(-n) 
+
+unigrams_conservative <- unigrams %>%
+  filter(political_lean == "Conservative") %>%
+  #mutate(word = wordStem(word)) %>%
+  count(word, sort = TRUE) %>%
+  mutate(percent_conservative = n/sum(n)) %>% 
+  select(-n) 
+
+library(SnowballC)
+full_join(unigrams_liberal, unigrams_conservative, by = "word") %>%
+  mutate(difference = percent_liberal - percent_conservative, 
+         more_used_from = ifelse(difference > 0, "Liberal", ifelse(difference < 0, "Conservative", "Equal")),
+         difference = abs(difference)) %>%
+  arrange(-abs(difference)) 
+```
+
+```{r bigrams}
+bigrams <- reddit_data %>%
+  unnest_tokens(bigrams, full_post, token = "ngrams", n=2) %>%
+  separate(bigrams, c("word1", "word2"), sep = " ") %>% 
+  anti_join(stop_words %>% rename(word1 = word), by = "word1") %>%
+  anti_join(stop_words %>% rename(word2 = word), by = "word2") %>%
+  filter(nchar(word1) > 3, !word1 %in% c("https","pjpg"), nchar(word2) > 3, !word2 %in% c("https","pjpg")) %>%
+  unite(bigram, word1, word2, sep = " ") %>%
+  distinct(title, bigram, .keep_all=TRUE) #use distinct to count bigram only once per post
+  
+bigrams %>% count(bigram, sort = TRUE)
+bigrams %>% filter(political_lean == "Conservative") %>% count(bigram, sort = TRUE)
+bigrams %>% filter(political_lean == "Liberal") %>% count(bigram, sort = TRUE)
+
+#sentiment analysis
+bigrams %>% 
+  filter(bigram == "donald trump") %>% 
+  group_by(political_lean) %>% 
+  summarise(average_sentiment = round(mean(sentiment, na.rm = TRUE),3)) %>%
+  ggplot(aes(x=political_lean, y=average_sentiment, fill = political_lean) ) +
+  geom_bar(stat="identity", show.legend=FALSE, colour="black") +
+  geom_label(aes(label=average_sentiment)) +
+  labs(title="Sentiment on Posts containing Donald Trump") +
+  xlab("") +
+  ylab("") +
+  ylim(-1,1) +
+  theme_bw()+
+  theme(legend.position="none")
+
+p1 <- bigrams %>% 
+  filter(bigram == "minimum wage") %>% 
+  group_by(political_lean) %>% 
+  summarise(average_sentiment = round(mean(sentiment, na.rm = TRUE),3)) %>%
+  ggplot(aes(x=political_lean, y=average_sentiment, fill = political_lean) ) +
+  geom_bar(stat="identity", show.legend=FALSE, colour="black") +
+  geom_label(aes(label=average_sentiment)) +
+  labs(title="Sentiment on Posts containing Minimum Wage") +
+  xlab("") +
+  ylab("") +
+  ylim(-1,1) +
+  theme_bw()+
+  theme(legend.position="none")
+
+p2 <- bigrams %>% 
+  filter(bigram == "social democracy") %>% 
+  group_by(political_lean) %>% 
+  summarise(average_sentiment = round(mean(sentiment, na.rm = TRUE),3)) %>%
+  ggplot(aes(x=political_lean, y=average_sentiment, fill = political_lean) ) +
+  geom_bar(stat="identity", show.legend=FALSE, colour="black") +
+  geom_label(aes(label=average_sentiment)) +
+  labs(title="Sentiment on Posts containing Social Democracy") +
+  xlab("") +
+  ylab("") +
+  ylim(-1,1) +
+  theme_bw()+
+  theme(legend.position="none") 
+
+p3 <- bigrams %>% 
+  filter(bigram == "social democracy") %>% 
+  group_by(political_lean) %>% 
+  summarise(average_sentiment = round(mean(sentiment, na.rm = TRUE),3)) %>%
+  ggplot(aes(x=political_lean, y=average_sentiment, fill = political_lean) ) +
+  geom_bar(stat="identity", show.legend=FALSE, colour="black") +
+  geom_label(aes(label=average_sentiment)) +
+  labs(title="Sentiment on Posts containing Social Democracy") +
+  xlab("") +
+  ylab("") +
+  ylim(-1,1) +
+  theme_bw()+
+  theme(legend.position="none")
+
+p4 <- bigrams %>% 
+  filter(bigram == "free market") %>% 
+  group_by(political_lean) %>% 
+  summarise(average_sentiment = round(mean(sentiment, na.rm = TRUE),3)) %>%
+  ggplot(aes(x=political_lean, y=average_sentiment, fill = political_lean) ) +
+  geom_bar(stat="identity", show.legend=FALSE, colour="black") +
+  geom_label(aes(label=average_sentiment)) +
+  labs(title="Sentiment on Posts containing Free Market") +
+  xlab("") +
+  ylab("") +
+  ylim(-1,1) +
+  theme_bw()+
+  theme(legend.position="none")
+
+bigrams %>% filter(bigram == "free market") %>% group_by(political_lean) %>% summarise(average_sentiment = mean(sentiment, na.rm = TRUE)) 
+```
+
+```{r trigrams}
+trigrams <- reddit_data %>%
+  unnest_tokens(trigram, full_post, token = "ngrams", n=3) %>%
+  separate(trigram, c("word1", "word2", "word3"), sep = " ") %>% 
+  anti_join(stop_words %>% rename(word1 = word), by = "word1") %>%
+  anti_join(stop_words %>% rename(word2 = word), by = "word2") %>%
+  anti_join(stop_words %>% rename(word3 = word), by = "word3") %>%
+  filter(nchar(word1) > 3, !word1 %in% c("https","pjpg"), nchar(word2) > 3, !word2 %in% c("https","pjpg"),  nchar(word3) > 3, !word3 %in% c("https","pjpg")) %>%
+  unite(trigram, word1, word2, word3, sep = " ") %>%
+  distinct(title, trigram, .keep_all=TRUE) #use distinct to count trigram only once per post
+  
+trigrams %>% count(trigram, sort = TRUE)
+trigrams %>% filter(political_lean == "Conservative") %>% count(trigram, sort = TRUE)
+trigrams %>% filter(political_lean == "Liberal") %>% count(trigram, sort = TRUE)
 ```
 
 
 
+
+#to-do
+- testing if sentiment of more liberal words like critical race theory is more positive if it is used by liberals than if it is used by conservatives
