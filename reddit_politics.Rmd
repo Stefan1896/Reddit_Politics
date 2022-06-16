@@ -118,7 +118,9 @@ reddit_data <- reddit_data %>% left_join(afinn, by = "id")
 ```
 
 
-```{r conservatives common words}
+```{r conservative common words}
+
+
 #most common meaningful words used by liberals and conservatives
 unigrams %>%
   filter(political_lean == "Conservative") %>%
@@ -157,19 +159,30 @@ unigrams %>%
 
 ```
 
-```{r}
-unigrams %>%
-  group_by(political_lean) %>%
-  count(word) %>%
-  top_n(20, n) %>%
-  ungroup() %>%
-  arrange(political_lean, -n) %>%
-  ggplot(aes(n, fct_reorder(word, n), fill = political_lean)) +
-  geom_col(show.legend = FALSE) +
-  facet_wrap(~political_lean, scales = "free_y", ncol = 2) +
-  labs(x = "Frequency", y = NULL) +
-  theme_bw()
+```{r common words}
+ngram_graph <- function(ngrams, ngram){
+  popular_words <- ngrams %>%
+    group_by(political_lean) %>%
+    count(!!sym(ngram), political_lean, sort = TRUE) %>%
+    slice(seq_len(11)) %>%
+    ungroup() %>%
+    arrange(political_lean,n) %>%
+    mutate(row = row_number()) %>%
+    rename("label" = ngram)
+  
+  popular_words %>%
+  ggplot(aes(row, n, fill = political_lean)) +
+  geom_col(show.legend = NULL) +
+  labs(x = NULL, y = "Frequency") +
+  theme_bw() +
+  facet_wrap(~political_lean, scales = "free") +
+  scale_x_continuous(  
+  breaks = popular_words$row, 
+  labels = popular_words$label) +
+  coord_flip() 
+}
 
+ngram_graph(unigrams, "word")
 ```
 
 
