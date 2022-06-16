@@ -17,6 +17,8 @@ library(ggthemes) #used for graphic specifics
 library(skimr) #used to get fist overview of dataset
 library(janitor) #used to clean variable names
 library(textdata) #used for sentiment analyses
+library(gridExtra) #used to arrange plots in grid with grid.arrange
+library(grid) #used to alter size and position of title within grid.arrange
 ```
 
 
@@ -220,83 +222,38 @@ bigrams <- reddit_data %>%
   unite(bigram, word1, word2, sep = " ") %>%
   distinct(title, bigram, .keep_all=TRUE) #use distinct to count bigram only once per post
   
-bigrams %>% count(bigram, sort = TRUE)
-bigrams %>% filter(political_lean == "Conservative") %>% count(bigram, sort = TRUE)
-bigrams %>% filter(political_lean == "Liberal") %>% count(bigram, sort = TRUE)
-
-#sentiment analysis
-bigrams %>% 
-  filter(bigram == "donald trump") %>% 
-  group_by(political_lean) %>% 
-  summarise(average_sentiment = round(mean(sentiment, na.rm = TRUE),3)) %>%
-  ggplot(aes(x=political_lean, y=average_sentiment, fill = political_lean) ) +
-  geom_bar(stat="identity", show.legend=FALSE, colour="black") +
-  geom_label(aes(label=average_sentiment)) +
-  labs(title="Sentiment on Posts containing Donald Trump") +
-  xlab("") +
-  ylab("") +
-  ylim(-1,1) +
-  theme_bw()+
-  theme(legend.position="none")
-
-p1 <- bigrams %>% 
-  filter(bigram == "minimum wage") %>% 
-  group_by(political_lean) %>% 
-  summarise(average_sentiment = round(mean(sentiment, na.rm = TRUE),3)) %>%
-  ggplot(aes(x=political_lean, y=average_sentiment, fill = political_lean) ) +
-  geom_bar(stat="identity", show.legend=FALSE, colour="black") +
-  geom_label(aes(label=average_sentiment)) +
-  labs(title="Sentiment on Posts containing Minimum Wage") +
-  xlab("") +
-  ylab("") +
-  ylim(-1,1) +
-  theme_bw()+
-  theme(legend.position="none")
-
-p2 <- bigrams %>% 
-  filter(bigram == "social democracy") %>% 
-  group_by(political_lean) %>% 
-  summarise(average_sentiment = round(mean(sentiment, na.rm = TRUE),3)) %>%
-  ggplot(aes(x=political_lean, y=average_sentiment, fill = political_lean) ) +
-  geom_bar(stat="identity", show.legend=FALSE, colour="black") +
-  geom_label(aes(label=average_sentiment)) +
-  labs(title="Sentiment on Posts containing Social Democracy") +
-  xlab("") +
-  ylab("") +
-  ylim(-1,1) +
-  theme_bw()+
-  theme(legend.position="none") 
-
-p3 <- bigrams %>% 
-  filter(bigram == "social democracy") %>% 
-  group_by(political_lean) %>% 
-  summarise(average_sentiment = round(mean(sentiment, na.rm = TRUE),3)) %>%
-  ggplot(aes(x=political_lean, y=average_sentiment, fill = political_lean) ) +
-  geom_bar(stat="identity", show.legend=FALSE, colour="black") +
-  geom_label(aes(label=average_sentiment)) +
-  labs(title="Sentiment on Posts containing Social Democracy") +
-  xlab("") +
-  ylab("") +
-  ylim(-1,1) +
-  theme_bw()+
-  theme(legend.position="none")
-
-p4 <- bigrams %>% 
-  filter(bigram == "free market") %>% 
-  group_by(political_lean) %>% 
-  summarise(average_sentiment = round(mean(sentiment, na.rm = TRUE),3)) %>%
-  ggplot(aes(x=political_lean, y=average_sentiment, fill = political_lean) ) +
-  geom_bar(stat="identity", show.legend=FALSE, colour="black") +
-  geom_label(aes(label=average_sentiment)) +
-  labs(title="Sentiment on Posts containing Free Market") +
-  xlab("") +
-  ylab("") +
-  ylim(-1,1) +
-  theme_bw()+
-  theme(legend.position="none")
-
-bigrams %>% filter(bigram == "free market") %>% group_by(political_lean) %>% summarise(average_sentiment = mean(sentiment, na.rm = TRUE)) 
+ngram_graph(bigrams, "bigram")
 ```
+
+```{r bigram sentiments}
+#sentiment analysis
+sentiment_plot <- function(selected_bigram){
+  bigrams %>% 
+  filter(bigram == tolower(selected_bigram)) %>% 
+  group_by(political_lean) %>% 
+  summarise(average_sentiment = round(mean(sentiment, na.rm = TRUE),3)) %>%
+  ggplot(aes(x=political_lean, y=average_sentiment, fill = political_lean) ) +
+  geom_bar(stat="identity", show.legend=FALSE, colour="black") +
+  geom_label(aes(label=average_sentiment)) +
+  labs(title=paste0("...",selected_bigram)) +
+  xlab("") +
+  ylab("") +
+  ylim(-1,1) +
+  theme_bw()+
+  theme(legend.position="none",
+        plot.title = element_text(size=11))
+}
+
+p1 <- sentiment_plot("Donald Trump")
+p2 <- sentiment_plot("Minimum Wage")
+p3 <- sentiment_plot("Social Democracy")
+p4 <- sentiment_plot("Free Market")
+
+grid.arrange(p1, p2, p3, p4, nrow = 2, top = textGrob("Sentiment of posts containing...", vjust = 0.2, gp=gpar(fontsize=18,font=1)))
+
+```
+
+
 
 ```{r trigrams}
 trigrams <- reddit_data %>%
