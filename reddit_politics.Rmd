@@ -19,6 +19,7 @@ library(janitor) #used to clean variable names
 library(textdata) #used for sentiment analyses
 library(gridExtra) #used to arrange plots in grid with grid.arrange
 library(grid) #used to alter size and position of title within grid.arrange
+library(wordcloud2) #used to generate word clouds
 ```
 
 
@@ -105,10 +106,7 @@ First of all, for example, it seems very likely and intuitive that the overall s
 
 We will use the AFINN lexicon for this approach: The AFINN lexicon assigns words with a score that runs between -5 and 5, with negative scores indicating negative sentiment and positive scores indicating positive sentiment.
 
-```{r Sentiment Analysis}
-#we use the get_sentiments function from the tidytext packages to get specific sentiment lexicons 
-get_sentiments("afinn")
-
+```{r Sentiment Analysis Preparation}
 afinn <- unigrams %>% 
   inner_join(get_sentiments("afinn")) %>% 
   group_by(id) %>% 
@@ -119,47 +117,6 @@ afinn <- unigrams %>%
 reddit_data <- reddit_data %>% left_join(afinn, by = "id")
 ```
 
-
-```{r conservative common words}
-
-
-#most common meaningful words used by liberals and conservatives
-unigrams %>%
-  filter(political_lean == "Conservative") %>%
-  count(word, sort = TRUE) %>%
-  top_n(20) %>%
-  ungroup() %>%
-  mutate(word = reorder(word, n)) %>%
-  ggplot() +
-  geom_col(aes(word, n), fill = "#E81B23") +
-  theme(legend.position = "none", 
-      plot.title = element_text(hjust = 0.5),
-      panel.grid.major = element_blank()) +
-  xlab("") + 
-  ylab("Word Count") +
-  ggtitle("Most common meaningful words from Conservatives") +
-  coord_flip() 
-```
-
-```{r liberals common words}
-#most common meaningful words used by liberals and conservatives
-unigrams %>%
-  filter(political_lean == "Liberal") %>%
-  count(word, sort = TRUE) %>%
-  top_n(20) %>%
-  ungroup() %>%
-  mutate(word = reorder(word, n)) %>%
-  ggplot() +
-  geom_col(aes(word, n), fill = "#0015BC") +
-  theme(legend.position = "none", 
-      plot.title = element_text(hjust = 0.5),
-      panel.grid.major = element_blank()) +
-  xlab("") + 
-  ylab("Word Count") +
-  ggtitle("Most common meaningful words from Liberals") +
-  coord_flip() 
-
-```
 
 ```{r common words}
 ngram_graph <- function(ngrams, ngram){
@@ -212,6 +169,7 @@ full_join(unigrams_liberal, unigrams_conservative, by = "word") %>%
   arrange(-abs(difference)) 
 ```
 
+
 ```{r bigrams}
 bigrams <- reddit_data %>%
   unnest_tokens(bigrams, full_post, token = "ngrams", n=2) %>%
@@ -250,7 +208,6 @@ p3 <- sentiment_plot("Social Democracy")
 p4 <- sentiment_plot("Free Market")
 
 grid.arrange(p1, p2, p3, p4, nrow = 2, top = textGrob("Sentiment of posts containing...", vjust = 0.2, gp=gpar(fontsize=18,font=1)))
-
 ```
 
 
@@ -266,13 +223,38 @@ trigrams <- reddit_data %>%
   unite(trigram, word1, word2, word3, sep = " ") %>%
   distinct(title, trigram, .keep_all=TRUE) #use distinct to count trigram only once per post
   
-trigrams %>% count(trigram, sort = TRUE)
-trigrams %>% filter(political_lean == "Conservative") %>% count(trigram, sort = TRUE)
-trigrams %>% filter(political_lean == "Liberal") %>% count(trigram, sort = TRUE)
+ngram_graph(trigrams, "trigram")
 ```
 
+```{r Further Sentiment Analysis}
+# Sentiments and frequency associated with each word  
+sentiments <- unigrams %>% 
+    inner_join(get_sentiments("nrc"))
+
+# We can use our defined ngram_graph function to look at the frequency of different sentiments across the two political sides
+ngram_graph(sentiments, "sentiment")
+
+```
+
+```{r wordcloud}
+wordcloud_data <- unigrams %>%
+                    filter(political_lean == "Conservative") %>%
+                    count(word, sort = TRUE) %>%
+                    top_n(50)
+
+wordcloud2(wordcloud_data,
+           size = 0.5, 
+           figPath = here("Pictures/testing.png"))
 
 
+figPath = system.file("examples/t.png",package = "wordcloud2")
+unigrams %>%
+filter(political_lean == "Conservative") %>%
+count(word, sort = TRUE) %>%
+top_n(200) %>%wordcloud2( figPath = figPath, size = 1.5,color = "skyblue")
 
-#to-do
-- testing if sentiment of more liberal words like critical race theory is more positive if it is used by liberals than if it is used by conservatives
+url = "https://raw.githubusercontent.com/lgellis/MiscTutorial/master/twitter_wordcloud/resistance.jpeg"
+resistance <- "C:/Users/swern/OneDrive/Desktop/resistance.jpeg"
+download.file(url, resistance)
+
+```
