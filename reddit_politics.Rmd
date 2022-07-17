@@ -44,6 +44,7 @@ library(grid) #used to alter size and position of title within grid.arrange
 library(ggpubr) #used for lollipop chart
 library(scales) #used to show percentage format in charts
 library(knitr) #used for table formatting
+library(radarchart) #used to make radarchart 
 ```
 
 ## Load Data
@@ -104,7 +105,15 @@ Notes:
 
 The original goal of this analysis was to look at what and how more Liberal-leaning users and more Conservative-leaning users are discussing online. With the knowledge that users are classified as Conservatives or Liberals in the dataset by using the underlying Subreddit of the posts, we should be aware of the following limitations in addressing this question:
 
-- **Limited comparability:** Later we will analyse which topics (words, word-pairs) are used the most within the classified political leans. We should be aware here that many differences between the groups in the usage of word or word-pairs can probably be explained solely by the classification method. Each Subreddit has a focus and for the most part maintains that focus. In other words, certain topics will be discussed more often in certain Subreddits. We would expect the word "capitalism" to be used especially often in the "Anarchocapitalism" or "Capitalism" Subreddits. Differences in word usage between the two politcal leans therefore cannot be explained alone by the classified political lean. Instead the two subgroups of this study have a clear guideline which topics to use because of the Subreddits. 
+- **Limited comparability:** Later we will analyse which topics (words, word-pairs) are used the most within the classified political leans. We should be aware here that many differences between the groups in the usage of word or word-pairs can probably be explained solely by the classification method. Each Subreddit has a focus and for the most part maintains that focus. In other words, certain topics will be discussed more often in certain Subreddits. We would expect the word "capitalism" to be used especially often in the "Anarchocapitalism" or "Capitalism" Subreddits. Differences in word usage between the two political leans therefore cannot be explained alone by the classified political lean. Instead the two subgroups of this study have a clear guideline which topics to use because of the Subreddits. This will be especially clear when looking at the description of the Subreddit "capitalism": 
+
+<br>
+
+<center>
+![](capitalism.jpg){width=25%}
+</center>
+
+<br>
 
 - **Limited validity of classification:** The classification in Conservatives or Liberals will probably not be correct in 100% of cases, since it seems likely that people will also sometimes post in Subreddits which are not typical for their political lean (e.g. to question the dominating view in that Subreddit). Also I could imagine that there are some users who would classify themselves somewhere in the middle of the political leans and still post in one of the 15 underlying Subreddits of this dataset.
 
@@ -265,19 +274,18 @@ selected_sentiments <- sentiments %>%
     filter(!is.na(sentiment)) %>%
     group_by(political_lean) %>%
     count(sentiment, political_lean, sort = TRUE) %>%
-    mutate(percent = n/sum(n)) %>% 
-    slice(seq_len(10)) %>%
-    ungroup() %>%
-    arrange(political_lean,percent) 
- 
+    mutate(percent = n/sum(n)*100) %>% 
+    ungroup()
+
+
 selected_sentiments %>%
-    ggplot(aes(political_lean, percent, color = sentiment, group = sentiment)) +
-    geom_line(size = 1.5) +
-    geom_point(size = 3.5) +
-    ggtitle("Proportion of sentiments used in Conservative- and Liberal Subreddits") +
-    scale_y_continuous(breaks = pretty_breaks(4), labels = percent_format(accuracy = 5L)) +
-    theme_few() +
-    labs(color="Sentiment", x ="", y = "Proportion")
+     select(-n) %>%
+     spread(political_lean, percent) %>%
+     chartJSRadar(showToolTipLabel = T, main="Political Lean and Sentiment Radar", maxScale=22, responsive=T,
+               addDots = T, 
+               colMatrix = grDevices::col2rgb(c("#F8766D","#00BFC4")),
+               lineAlpha = 0.7, polyAlpha = 0.05)
+
 ```
 
 Notes:
@@ -314,10 +322,11 @@ Notes:
 - In Conservative-leaning Subreddits, the names from three prominent figures of the Republican Party are used especially often ("Ron Desantis", "Donald Trump", "Ronald Reagon"). The current President of the United States and member of the Democratic Party ("Joe Biden") also plays a surpisingly big role in Conservative-leaning Subreddits. 
 - The name "Elon Musk" is also used especially often in Conservative-leaning Subreddits. This make sense since he is increasingly connected to conservative viewpoints in the last years and he just recently said on Twitter that he plans to "vote Republican":
 
-
+<br>
+<center>
 ![](musk_post.PNG){width=50%}
-
-
+</center>
+<br>
 
 ## Sentiment Analysis
 
@@ -424,6 +433,7 @@ hashtags %>% filter(ind == "Liberal Subreddits") %>% count(values) %>% mutate(po
   labs(fill = "Used in:", x = "", y = "Counts", fill = "") +
   theme_few() +
   theme(axis.text.x = element_text(size=9))
+
 ```
 
 Notes:
