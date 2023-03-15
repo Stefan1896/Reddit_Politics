@@ -1,4 +1,4 @@
-# reddit_politics
+# Reddit Politics
 
 The goal of this projects is to find some interesting patterns in what and how more Liberal-leaning users and more Conservative-leaning users are discussing online.
 
